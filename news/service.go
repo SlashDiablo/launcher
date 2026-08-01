@@ -27,12 +27,14 @@ type JSONItem struct {
 	Link  string `json:"link"`
 }
 
-// SetNewsItems will fetch the news from the Slashdiablo server.
+// SetNewsItems will fetch the news from the SlashDiablo server.
 func (s *service) SetNewsItems() error {
 	contents, err := s.client.GetNews()
 	if err != nil {
 		return err
 	}
+
+	defer contents.Close()
 
 	bytes, err := ioutil.ReadAll(contents)
 	if err != nil {

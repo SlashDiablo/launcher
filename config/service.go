@@ -69,6 +69,8 @@ func (s *service) AddGame() {
 	g.Flags = []string{"-w", "-skiptobnet"}
 	g.HDVersion = ModVersionNone
 	g.MaphackVersion = ModVersionNone
+	g.D2GLVersion = ModVersionNone
+	g.D2GLSplitProfiles = false
 
 	s.gameModel.AddGame(g)
 }
@@ -82,6 +84,11 @@ type UpdateGameRequest struct {
 	Flags          []string `json:"flags"`
 	HDVersion      string   `json:"hd_version"`
 	MaphackVersion string   `json:"maphack_version"`
+	D2GLVersion    string   `json:"d2gl_version"`
+
+	D2GLSplitProfiles    bool   `json:"d2gl_split_profiles"`
+	D2GLMainResolution   string `json:"d2gl_main_resolution"`
+	D2GLLoaderResolution string `json:"d2gl_loader_resolution"`
 }
 
 // UpsertGame will upsert the game to the config.
@@ -104,6 +111,10 @@ func (s *service) UpsertGame(request UpdateGameRequest) error {
 			games[i].Flags = request.Flags
 			games[i].HDVersion = request.HDVersion
 			games[i].MaphackVersion = request.MaphackVersion
+			games[i].D2GLVersion = request.D2GLVersion
+			games[i].D2GLSplitProfiles = request.D2GLSplitProfiles
+			games[i].D2GLMainResolution = request.D2GLMainResolution
+			games[i].D2GLLoaderResolution = request.D2GLLoaderResolution
 		}
 	}
 
@@ -175,6 +186,11 @@ func (s *service) PersistGameModel() error {
 			Flags:          games[i].Flags,
 			HDVersion:      games[i].HDVersion,
 			MaphackVersion: games[i].MaphackVersion,
+			D2GLVersion:    games[i].D2GLVersion,
+
+			D2GLSplitProfiles:    games[i].D2GLSplitProfiles,
+			D2GLMainResolution:   games[i].D2GLMainResolution,
+			D2GLLoaderResolution: games[i].D2GLLoaderResolution,
 		})
 	}
 
@@ -204,12 +220,14 @@ func (s *service) UpdateLaunchDelay(delay int) error {
 	return nil
 }
 
-// GetAvailableMods will get available mods from the Slashdiablo API.
+// GetAvailableMods will get available mods from the SlashDiablo API.
 func (s *service) GetAvailableMods() (*GameMods, error) {
 	contents, err := s.slashdiabloClient.GetAvailableMods()
 	if err != nil {
 		return nil, err
 	}
+
+	defer contents.Close()
 
 	bytes, err := ioutil.ReadAll(contents)
 	if err != nil {

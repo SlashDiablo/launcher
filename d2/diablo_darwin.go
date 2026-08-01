@@ -1,3 +1,4 @@
+//go:build darwin
 // +build darwin
 
 package d2
@@ -12,6 +13,10 @@ const (
 
 	// ModHDIdentifier is the identifier we use to look for installs of hd mod.
 	ModHDIdentifier = "D2HD.dll"
+
+	// ModD2GLIdentifier is the identifier we use to look for installs of d2gl.
+	// d2gl replaces the Glide wrapper, so glide3x.dll is what it always ships.
+	ModD2GLIdentifier = "glide3x.dll"
 )
 
 // validate113cVersion will check the given installations Diablo II version.

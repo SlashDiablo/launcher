@@ -17,12 +17,18 @@ Popup {
         "override_bh_cfg": 264,
         "flags": 272,
         "hd_version": 288,
-        "maphack_version": 320
+        "maphack_version": 320,
+        "d2gl_version": 384,
+        "d2gl_split_profiles": 512,
+        "d2gl_main_resolution": 768,
+        "d2gl_loader_resolution": 1280
     }
 
     modal: true
     focus: true
     width: 850
+    // The DONE button hangs 20px below the popup and the view is shorter than
+    // the 1024x600 from main.go, so this cannot grow. Shrink boxHeight instead.
     height: 520
     margins: 0
     padding: 0
@@ -336,7 +342,9 @@ Popup {
                         id: gameSettings
                         anchors.left: parent.left
                         anchors.top: parent.top
-                        anchors.topMargin: 40
+                        // The GAME/D2GL tab header takes the first 30px, so the
+                        // rows below land where they did before the tabs existed.
+                        anchors.topMargin: 10
                         anchors.horizontalCenter: parent.horizontalCenter
                     }
                 }
@@ -430,6 +438,10 @@ Popup {
                 "flags": model.data(model.index(gamesList.currentIndex, 0), gameRoles.flags),
                 "hd_version": model.data(model.index(gamesList.currentIndex, 0), gameRoles.hd_version),
                 "maphack_version": model.data(model.index(gamesList.currentIndex, 0), gameRoles.maphack_version),
+                "d2gl_version": model.data(model.index(gamesList.currentIndex, 0), gameRoles.d2gl_version),
+                "d2gl_split_profiles": model.data(model.index(gamesList.currentIndex, 0), gameRoles.d2gl_split_profiles),
+                "d2gl_main_resolution": model.data(model.index(gamesList.currentIndex, 0), gameRoles.d2gl_main_resolution),
+                "d2gl_loader_resolution": model.data(model.index(gamesList.currentIndex, 0), gameRoles.d2gl_loader_resolution),
             })
         }
     }

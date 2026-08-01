@@ -17,7 +17,7 @@ import (
 	"github.com/nokka/slashdiablo-launcher/storage"
 )
 
-// Service is responsible for all things related to the Slashdiablo ladder.
+// Service is responsible for all things related to the SlashDiablo ladder.
 type Service interface {
 	// Exec is responsible for executing the Diablo II game.
 	Exec() error
@@ -80,6 +80,16 @@ func (s *service) Exec() error {
 
 	for k, g := range conf.Games {
 		if g.Instances > 0 {
+			// The profile files have to be on disk before the first box reads them.
+			if err := applyD2GLProfiles(g); err != nil {
+				return err
+			}
+
+			// Instances has already been reduced by the number of boxes running,
+			// so continue counting from those to keep the main d2gl profile on a
+			// single box when more loaders are launched later.
+			running := s.runningInstances(g.ID)
+
 			for i := 0; i < g.Instances; i++ {
 				// Check if it's the first run, if so don't delay the launch.
 				firstRun := (k == 0 && i == 0)
@@ -89,7 +99,7 @@ func (s *service) Exec() error {
 				}
 
 				// The third argument is a channel, listened on by listenForGameStates().
-				pid, err := launch(g.Location, g.Flags, s.gameStates)
+				pid, err := launch(g.Location, launchFlags(g, running+i), s.gameStates)
 				if err != nil {
 					return err
 				}
@@ -114,6 +124,8 @@ func (s *service) getAvailableMods() (*config.GameMods, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	defer contents.Close()
 
 	bytes, err := ioutil.ReadAll(contents)
 	if err != nil {
@@ -177,7 +189,7 @@ func (s *service) ValidateGameVersions() (bool, error) {
 			}
 
 			// Check if the current game install is up to date with the slash patch.
-			slashFiles, _, err := s.getFilesToPatch(slashManifest.Files, game.Location, nil)
+			slashFiles, _, err := s.getFilesToPatch(slashManifest.Files, game.Location, slashPatchIgnoredFiles(game))
 			if err != nil {
 				return false, err
 			}
@@ -205,6 +217,16 @@ func (s *service) ValidateGameVersions() (bool, error) {
 
 			// HD version wasn't valid, we need to update.
 			if !validHD {
+				upToDate = false
+			}
+
+			validD2GL, err := s.validateD2GLVersion(&game, mods.D2GL)
+			if err != nil {
+				return false, err
+			}
+
+			// d2gl version wasn't valid, we need to update.
+			if !validD2GL {
 				upToDate = false
 			}
 		}
@@ -295,6 +317,59 @@ func (s *service) resetHDPatch(game storage.Game) error {
 	return nil
 }
 
+// d2glEnabled reports whether the game has a d2gl version selected. Configs
+// written before d2gl support have no d2gl_version field at all, which
+// unmarshals to an empty string rather than ModVersionNone.
+func d2glEnabled(game storage.Game) bool {
+	return game.D2GLVersion != "" && game.D2GLVersion != config.ModVersionNone
+}
+
+// slashPatchIgnoredFiles returns files the SlashDiablo patch must leave alone
+// for this game. The patch ships its own glide3x.dll and so does d2gl, so with
+// both enabled each overwrites the other and every validation reports the game
+// as out of date, patching forever.
+func slashPatchIgnoredFiles(game storage.Game) []string {
+	if d2glEnabled(game) {
+		return []string{ModD2GLIdentifier}
+	}
+
+	return nil
+}
+
+func (s *service) resetD2GLPatch(game storage.Game) error {
+	mods, err := s.getAvailableMods()
+	if err != nil {
+		return err
+	}
+
+	// Go over available d2gl versions and reset them if they are installed.
+	for _, m := range mods.D2GL {
+		// Desired version, don't reset it.
+		if game.D2GLVersion == m {
+			continue
+		}
+
+		d2glManifest, err := s.getManifest(fmt.Sprintf("d2gl_%s/manifest.json", m))
+		if err != nil {
+			return err
+		}
+
+		installed, err := isModInstalled(game.Location, ModD2GLIdentifier, d2glManifest)
+		if err != nil {
+			return err
+		}
+
+		if installed {
+			err := s.resetPatch(game.Location, d2glManifest.Files, nil)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
 func (s *service) resetMaphackPatch(game storage.Game, filesToIgnore []string) error {
 	mods, err := s.getAvailableMods()
 	if err != nil {
@@ -347,6 +422,9 @@ func (s *service) Patch(done chan bool) (<-chan float32, <-chan PatchState) {
 		// Map of maphack manifests, so we don't have to download them twice.
 		var maphackManifests = make(map[string]*Manifest, 0)
 
+		// Map of d2gl manifests, so we don't have to download them twice.
+		var d2glManifests = make(map[string]*Manifest, 0)
+
 		for _, game := range conf.Games {
 			// If the user has chosen to override the maphack config with their own,
 			// we need to make sure the config is being ignored from the patch, and also
@@ -371,14 +449,21 @@ func (s *service) Patch(done chan bool) (<-chan float32, <-chan PatchState) {
 				return
 			}
 
+			// Reset the d2gl versions, to avoid rogue files and duplicates.
+			err = s.resetD2GLPatch(game)
+			if err != nil {
+				state <- PatchState{Error: err}
+				return
+			}
+
 			// The install has been reset, let's validate the 1.13c version and apply missing files.
 			if err := s.apply113c(game.Location, state, progress); err != nil {
 				state <- PatchState{Error: err}
 				return
 			}
 
-			// Apply the Slashdiablo specific patch.
-			err = s.applySlashPatch(game.Location, state, progress)
+			// Apply the SlashDiablo specific patch.
+			err = s.applySlashPatch(game.Location, state, progress, slashPatchIgnoredFiles(game))
 			if err != nil {
 				state <- PatchState{Error: err}
 				return
@@ -438,6 +523,33 @@ func (s *service) Patch(done chan bool) (<-chan float32, <-chan PatchState) {
 				}
 			}
 
+			// d2gl version was set on the game, download it.
+			if d2glEnabled(game) {
+				dgm, ok := d2glManifests[game.D2GLVersion]
+				if !ok {
+					d2glManifest, err := s.getManifest(fmt.Sprintf("d2gl_%s/manifest.json", game.D2GLVersion))
+					if err != nil {
+						state <- PatchState{Error: err}
+						return
+					}
+
+					d2glManifests[game.D2GLVersion] = d2glManifest
+					dgm = d2glManifest
+				}
+
+				// Just to be safe and avoid a panic.
+				if d2glManifests[game.D2GLVersion] == nil {
+					state <- PatchState{Error: errors.New("missing d2gl manifest")}
+					return
+				}
+
+				err = s.applyD2GLMod(game.Location, game.D2GLVersion, state, progress, dgm.Files)
+				if err != nil {
+					state <- PatchState{Error: err}
+					return
+				}
+			}
+
 			// Finally set os specific configurations, such as compatibility mode.
 			err = configureForOS(game.Location)
 			if err != nil {
@@ -471,17 +583,24 @@ func (s *service) SetLaunchDelay(delay int) error {
 
 func (s *service) mutateInstancesToLaunch(games []storage.Game) {
 	for i := 0; i < len(games); i++ {
-		var runningCount int
-		for _, running := range s.runningGames {
-			if games[i].ID == running.GameID {
-				runningCount++
-			}
-		}
-
 		// If any games of this id is running already, subtract the number
 		// and mutate the game so the next time we launch, we launch the correct number.
-		games[i].Instances = games[i].Instances - runningCount
+		games[i].Instances = games[i].Instances - s.runningInstances(games[i].ID)
 	}
+}
+
+// runningInstances returns the number of instances of the given game that are
+// already running.
+func (s *service) runningInstances(gameID string) int {
+	var count int
+
+	for _, running := range s.runningGames {
+		if running.GameID == gameID {
+			count++
+		}
+	}
+
+	return count
 }
 
 func (s *service) listenForGameStates() {
@@ -543,6 +662,50 @@ func (s *service) validateMaphackVersion(game *storage.Game, versions []string) 
 			}
 
 			// Maphack wasn't supposed to be installed, but it is, we need to update.
+			if installed {
+				// Before we return, we need to add these to the patch actions, since they will be removed.
+				err := s.addPatchFilesToBeDeleted(game.Location, manifest.Files)
+				if err != nil {
+					return false, err
+				}
+
+				isValid = false
+			}
+		}
+	}
+
+	return isValid, nil
+}
+
+func (s *service) validateD2GLVersion(game *storage.Game, versions []string) (bool, error) {
+	isValid := true
+
+	for _, v := range versions {
+		manifest, err := s.getManifest(fmt.Sprintf("d2gl_%s/manifest.json", v))
+		if err != nil {
+			return false, err
+		}
+
+		// This particular d2gl version should be installed.
+		if game.D2GLVersion == v {
+			// Check if the current game install is up to date with the d2gl patch.
+			missingFiles, _, err := s.getFilesToPatch(manifest.Files, game.Location, nil)
+			if err != nil {
+				return false, err
+			}
+
+			// d2gl isn't up to date.
+			if len(missingFiles) > 0 {
+				s.addFilesToModel(missingFiles)
+				isValid = false
+			}
+		} else {
+			installed, err := isModInstalled(game.Location, ModD2GLIdentifier, manifest)
+			if err != nil {
+				return false, err
+			}
+
+			// d2gl wasn't supposed to be installed, but it is, we need to update.
 			if installed {
 				// Before we return, we need to add these to the patch actions, since they will be removed.
 				err := s.addPatchFilesToBeDeleted(game.Location, manifest.Files)
@@ -633,8 +796,8 @@ func (s *service) apply113c(path string, state chan PatchState, progress chan fl
 	return nil
 }
 
-func (s *service) applySlashPatch(path string, state chan PatchState, progress chan float32) error {
-	state <- PatchState{Message: "Checking Slashdiablo patch..."}
+func (s *service) applySlashPatch(path string, state chan PatchState, progress chan float32, ignoredFiles []string) error {
+	state <- PatchState{Message: "Checking SlashDiablo patch..."}
 
 	// Download manifest from patch repository.
 	manifest, err := s.getManifest("current/manifest.json")
@@ -643,13 +806,13 @@ func (s *service) applySlashPatch(path string, state chan PatchState, progress c
 	}
 
 	// Figure out which files to patch.
-	patchFiles, patchLength, err := s.getFilesToPatch(manifest.Files, path, nil)
+	patchFiles, patchLength, err := s.getFilesToPatch(manifest.Files, path, ignoredFiles)
 	if err != nil {
 		return err
 	}
 
 	if len(patchFiles) > 0 {
-		state <- PatchState{Message: fmt.Sprintf("Updating %s to current Slashdiablo patch", path)}
+		state <- PatchState{Message: fmt.Sprintf("Updating %s to current SlashDiablo patch", path)}
 
 		if err = s.doPatch(patchFiles, patchLength, "current", path, progress); err != nil {
 			patchErr := err
@@ -708,6 +871,37 @@ func (s *service) applyHDMod(path string, version string, state chan PatchState,
 		state <- PatchState{Message: fmt.Sprintf("Updating %s to HD %s mod version", path, version)}
 
 		remoteDir := fmt.Sprintf("hd_%s", version)
+
+		if err = s.doPatch(patchFiles, patchLength, remoteDir, path, progress); err != nil {
+			patchErr := err
+			// Make sure we clean up the failed patch.
+			if err := s.cleanUpFailedPatch(path); err != nil {
+				return fmt.Errorf("Clean up error: %s : %s", patchErr, err)
+			}
+
+			return err
+		}
+	}
+
+	return nil
+}
+
+// applyD2GLMod installs the d2gl Glide/DDraw wrapper into the game directory.
+func (s *service) applyD2GLMod(path string, version string, state chan PatchState, progress chan float32, manifestFiles []PatchFile) error {
+	// Update UI.
+	state <- PatchState{Message: "Checking d2gl version..."}
+
+	// Figure out which files to patch.
+	patchFiles, patchLength, err := s.getFilesToPatch(manifestFiles, path, nil)
+	if err != nil {
+		return err
+	}
+
+	if len(patchFiles) > 0 {
+		// Update UI.
+		state <- PatchState{Message: fmt.Sprintf("Updating %s to d2gl %s version", path, version)}
+
+		remoteDir := fmt.Sprintf("d2gl_%s", version)
 
 		if err = s.doPatch(patchFiles, patchLength, remoteDir, path, progress); err != nil {
 			patchErr := err
@@ -783,6 +977,8 @@ func (s *service) downloadFile(fileName string, remoteDir string, path string, c
 	if err != nil {
 		return err
 	}
+
+	defer contents.Close()
 
 	_, err = io.Copy(out, io.TeeReader(contents, counter))
 	if err != nil {
@@ -948,6 +1144,8 @@ func (s *service) getManifest(path string) (*Manifest, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	defer contents.Close()
 
 	bytes, err := ioutil.ReadAll(contents)
 	if err != nil {

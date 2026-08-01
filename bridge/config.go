@@ -25,6 +25,7 @@ type ConfigBridge struct {
 	_ string   `property:"buildVersion"`
 	_ []string `property:"availableHDMods"`
 	_ []string `property:"availableMaphackMods"`
+	_ []string `property:"availableD2GLMods"`
 	_ bool     `property:"prerequisitesLoaded"`
 	_ bool     `property:"prerequisitesError"`
 
@@ -104,6 +105,7 @@ func (c *ConfigBridge) getPrerequisites() {
 		defaultMods := []string{config.ModVersionNone}
 		c.SetAvailableHDMods(append(defaultMods, mods.HD...))
 		c.SetAvailableMaphackMods(append(defaultMods, mods.Maphack...))
+		c.SetAvailableD2GLMods(append(defaultMods, mods.D2GL...))
 
 		c.SetPrerequisitesLoaded(true)
 	}()

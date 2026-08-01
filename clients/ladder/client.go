@@ -76,8 +76,8 @@ func (c *Client) do(method string, addr string, payload []byte) ([]byte, error) 
 }
 
 // NewClient returns a new ladder client with all dependencies.
-func NewClient() Client {
+func NewClient(address string) Client {
 	return Client{
-		address: "https://ladder.slashdiablo.net",
+		address: address,
 	}
 }
