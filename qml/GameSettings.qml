@@ -9,7 +9,21 @@ Item {
     property bool depError: false
     property int activeHDIndex: 0
     property int activeMaphackIndex: 0
-    property int boxHeight: 58
+    property int activeD2GLIndex: 0
+    property int activeTab: 0
+    property int activeMainResIndex: 0
+    property int activeLoaderResIndex: 0
+    property int boxHeight: 50
+
+    // Window sizes d2gl offers itself, taken from its own list in ini.cpp, with
+    // "default" meaning the launcher leaves the profile's resolution alone.
+    property var resolutions: [
+        "default",
+        "800x600", "960x720", "1024x768", "1200x900", "1280x960", "1440x1080",
+        "1600x1200", "1920x1440", "2560x1920", "2732x2048",
+        "1068x600", "1280x720", "1600x900", "1920x1080", "2048x1152",
+        "2560x1440", "3200x1800", "3840x2160"
+    ]
 
     function setGame(current) {
         // Set current game instance to the view.
@@ -25,7 +39,24 @@ Item {
         updateToggleBoxes(current)
         updateHDVersions(current)
         updateMaphackVersions(current)
+        updateD2GLVersions(current)
+        splitD2GLProfilesSwitch.update()
+        activeMainResIndex = resolutionIndex(current.d2gl_main_resolution)
+        mainResolution.currentIndex = activeMainResIndex
+        activeLoaderResIndex = resolutionIndex(current.d2gl_loader_resolution)
+        loaderResolution.currentIndex = activeLoaderResIndex
+    }
 
+    // resolutionIndex finds the dropdown index for a stored resolution, falling
+    // back to "default" for anything unset or no longer offered.
+    function resolutionIndex(resolution) {
+        for(var i = 0; i < resolutions.length; i++) {
+            if(resolutions[i] == resolution) {
+                return i
+            }
+        }
+
+        return 0
     }
 
     function updateToggleBoxes(current) {
@@ -56,6 +87,24 @@ Item {
         // Default to first index in list.
         activeHDIndex = 0
         hdVersion.currentIndex = 0
+    }
+
+    // updateD2GLVersions will set the correct index of the d2gl dropdown.
+    function updateD2GLVersions(current) {
+        if(settings.availableD2GLMods.length > 0) {
+            // Find the correct index.
+            for(var i = 0; i < settings.availableD2GLMods.length; i++) {
+                if(settings.availableD2GLMods[i] == current.d2gl_version) {
+                    activeD2GLIndex = i
+                    d2glVersion.currentIndex = i
+                    return
+                }
+            }
+        }
+
+        // Default to first index in list.
+        activeD2GLIndex = 0
+        d2glVersion.currentIndex = 0
     }
 
     // updateMaphackVersions will set the correct index of the maphack mod dropdown.
@@ -114,18 +163,49 @@ Item {
                 override_bh_cfg: overrideMaphackCfgSwitch.checked,
                 flags: makeFlagList(),
                 hd_version: hdVersion.currentText,
-                maphack_version: maphackVersion.currentText
+                maphack_version: maphackVersion.currentText,
+                d2gl_version: d2glVersion.currentText,
+                d2gl_split_profiles: splitD2GLProfilesSwitch.checked,
+                d2gl_main_resolution: mainResolution.currentText,
+                d2gl_loader_resolution: loaderResolution.currentText
             }
             
             settings.upsertGame(JSON.stringify(body))
         }
     }
 
+    // Tab header. It sits in the gap SettingsPopup used to leave above the
+    // content, so the rows below stay exactly where they were.
+    Row {
+        id: tabHeader
+        height: 30
+        spacing: 25
+        x: (parent.width * 0.025)
+
+        Repeater {
+            model: ["GAME", "D2GL"]
+
+            Title {
+                text: modelData
+                font.pixelSize: 14
+                color: (index == activeTab) ? "#c7cbd1" : "#5c5c5c"
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: activeTab = index
+                }
+            }
+        }
+    }
+
     Item {
         id: currentGame
+        visible: (activeTab == 0)
         width: parent.width
         height: 400
 
+        anchors.top: tabHeader.bottom
         anchors.horizontalCenter: parent.horizontalCenter
 
         ColumnLayout {
@@ -411,6 +491,53 @@ Item {
                 Separator{}
             }
 
+            // Include d2gl box.
+            Item {
+                Layout.preferredWidth: settingsLayout.width
+                Layout.preferredHeight: boxHeight
+
+                Row {
+                    topPadding: 10
+
+                    Column {
+                        width: (settingsLayout.width - includeD2GL.width)
+                        Title {
+                            text: "D2GL VERSION"
+                            font.pixelSize: 13
+                        }
+
+                        SText {
+                            // d2gl only loads when the game runs in Glide mode, so a
+                            // version selected without -3dfx silently does nothing.
+                            property bool missingGlideFlag: (d2glVersion.currentText != "none" && !gfxFlag.active)
+
+                            text: missingGlideFlag
+                                ? "Turn on -3dfx above, d2gl will not load without it"
+                                : "Glide wrapper for modern GPUs, needs the -3dfx flag"
+                            font.pixelSize: 11
+                            topPadding: 5
+                            color: missingGlideFlag ? "#8f3131" : "#676767"
+                        }
+                    }
+                    Column {
+                        id: includeD2GL
+                        width: 90
+
+                        Dropdown{
+                            id: d2glVersion
+                            currentIndex: activeD2GLIndex
+                            model: settings.availableD2GLMods
+                            height: 30
+                            width: 90
+
+                            onActivated: updateGameModel()
+                        }
+                    }
+                }
+
+                Separator{}
+            }
+
             // Use default maphack config.
             Item {
                 Layout.preferredWidth: settingsLayout.width
@@ -528,6 +655,178 @@ Item {
                         color: "#ffffff"
                     }
                 }
+            }
+        }
+    }
+
+    Item {
+        id: d2glPage
+        visible: (activeTab == 1)
+        width: parent.width
+        height: 400
+
+        anchors.top: tabHeader.bottom
+        anchors.horizontalCenter: parent.horizontalCenter
+
+        ColumnLayout {
+            id: d2glLayout
+            width: (d2glPage.width * 0.95)
+            spacing: 2
+
+            anchors.horizontalCenter: parent.horizontalCenter
+
+            // Explanation.
+            Item {
+                Layout.preferredWidth: d2glLayout.width
+                Layout.preferredHeight: 110
+
+                Column {
+                    topPadding: 10
+                    width: d2glLayout.width
+
+                    Title {
+                        text: "MULTIBOX PROFILES"
+                        font.pixelSize: 13
+                    }
+
+                    SText {
+                        text: "d2gl keeps its settings in d2gl.ini next to the game, one file shared by every box. Splitting profiles launches your first box with its own d2gl_main.ini and every loader with d2gl_loader.ini, so a main character can run at a higher resolution than the barb and sorc behind it. Press ctrl+O in game to change anything else - it saves to whichever profile that box was launched with."
+                        width: d2glLayout.width
+                        wrapMode: Text.WordWrap
+                        font.pixelSize: 11
+                        topPadding: 5
+                        color: "#676767"
+                    }
+                }
+
+                Separator{}
+            }
+
+            // Split profiles.
+            Item {
+                Layout.preferredWidth: d2glLayout.width
+                Layout.preferredHeight: boxHeight
+
+                Row {
+                    topPadding: 10
+
+                    Column {
+                        width: (d2glLayout.width - splitProfilesToggle.width)
+                        Title {
+                            text: "SEPARATE MAIN BOX PROFILE"
+                            font.pixelSize: 13
+                        }
+
+                        SText {
+                            // The profiles only mean anything when d2gl is the
+                            // wrapper actually being loaded.
+                            property bool d2glOff: (d2glVersion.currentText == "none")
+
+                            text: d2glOff
+                                ? "Pick a d2gl version on the GAME tab first"
+                                : "First box launches with -config main, every other box with -config loader"
+                            font.pixelSize: 11
+                            topPadding: 5
+                            color: d2glOff ? "#8f3131" : "#676767"
+                        }
+                    }
+                    Column {
+                        id: splitProfilesToggle
+                        width: 60
+
+                        SSwitch{
+                            id: splitD2GLProfilesSwitch
+                            checked: ((game != undefined && game.d2gl_split_profiles != undefined) ? game.d2gl_split_profiles : false)
+                            onToggled: updateGameModel()
+                        }
+                    }
+                }
+
+                Separator{}
+            }
+
+            // Main box resolution.
+            Item {
+                Layout.preferredWidth: d2glLayout.width
+                Layout.preferredHeight: boxHeight
+
+                Row {
+                    topPadding: 10
+
+                    Column {
+                        width: (d2glLayout.width - mainResolutionDropdown.width)
+                        Title {
+                            text: "MAIN BOX RESOLUTION"
+                            font.pixelSize: 13
+                        }
+
+                        SText {
+                            text: "Written to d2gl_main.ini on launch, leave on default to keep what d2gl has"
+                            font.pixelSize: 11
+                            topPadding: 5
+                            color: "#676767"
+                        }
+                    }
+                    Column {
+                        id: mainResolutionDropdown
+                        width: 110
+
+                        Dropdown{
+                            id: mainResolution
+                            currentIndex: activeMainResIndex
+                            model: resolutions
+                            height: 30
+                            width: 110
+                            enabled: splitD2GLProfilesSwitch.checked
+
+                            onActivated: updateGameModel()
+                        }
+                    }
+                }
+
+                Separator{}
+            }
+
+            // Loader resolution.
+            Item {
+                Layout.preferredWidth: d2glLayout.width
+                Layout.preferredHeight: boxHeight
+
+                Row {
+                    topPadding: 10
+
+                    Column {
+                        width: (d2glLayout.width - loaderResolutionDropdown.width)
+                        Title {
+                            text: "LOADER RESOLUTION"
+                            font.pixelSize: 13
+                        }
+
+                        SText {
+                            text: "Written to d2gl_loader.ini on launch, shared by every box after the first"
+                            font.pixelSize: 11
+                            topPadding: 5
+                            color: "#676767"
+                        }
+                    }
+                    Column {
+                        id: loaderResolutionDropdown
+                        width: 110
+
+                        Dropdown{
+                            id: loaderResolution
+                            currentIndex: activeLoaderResIndex
+                            model: resolutions
+                            height: 30
+                            width: 110
+                            enabled: splitD2GLProfilesSwitch.checked
+
+                            onActivated: updateGameModel()
+                        }
+                    }
+                }
+
+                Separator{}
             }
         }
     }

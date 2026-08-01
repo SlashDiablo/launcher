@@ -13,6 +13,10 @@ const (
 	Flags
 	HDVersion
 	MaphackVersion
+	D2GLVersion
+	D2GLSplitProfiles
+	D2GLMainResolution
+	D2GLLoaderResolution
 )
 
 // GameModel represents a Diablo game.
@@ -36,6 +40,11 @@ func (m *GameModel) init() {
 		Flags:          core.NewQByteArray2("flags", -1),
 		HDVersion:      core.NewQByteArray2("hd_version", -1),
 		MaphackVersion: core.NewQByteArray2("maphack_version", -1),
+		D2GLVersion:    core.NewQByteArray2("d2gl_version", -1),
+
+		D2GLSplitProfiles:    core.NewQByteArray2("d2gl_split_profiles", -1),
+		D2GLMainResolution:   core.NewQByteArray2("d2gl_main_resolution", -1),
+		D2GLLoaderResolution: core.NewQByteArray2("d2gl_loader_resolution", -1),
 	})
 
 	m.ConnectData(m.data)
@@ -83,6 +92,14 @@ func (m *GameModel) data(index *core.QModelIndex, role int) *core.QVariant {
 		return core.NewQVariant1(item.HDVersion)
 	case MaphackVersion:
 		return core.NewQVariant1(item.MaphackVersion)
+	case D2GLVersion:
+		return core.NewQVariant1(item.D2GLVersion)
+	case D2GLSplitProfiles:
+		return core.NewQVariant1(item.D2GLSplitProfiles)
+	case D2GLMainResolution:
+		return core.NewQVariant1(item.D2GLMainResolution)
+	case D2GLLoaderResolution:
+		return core.NewQVariant1(item.D2GLLoaderResolution)
 	default:
 		return core.NewQVariant()
 	}
@@ -99,7 +116,8 @@ func (m *GameModel) addGame(g *Game) {
 func (m *GameModel) updateGame(index int) {
 	var fIndex = m.Index(0, 0, core.NewQModelIndex())
 	var lIndex = m.Index(index, 0, core.NewQModelIndex())
-	m.DataChanged(fIndex, lIndex, []int{Location, Instances, OverrideBHCfg, Flags, HDVersion, MaphackVersion})
+	m.DataChanged(fIndex, lIndex, []int{Location, Instances, OverrideBHCfg, Flags, HDVersion, MaphackVersion, D2GLVersion,
+		D2GLSplitProfiles, D2GLMainResolution, D2GLLoaderResolution})
 }
 
 func (m *GameModel) removeGame(index int) {

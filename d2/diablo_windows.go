@@ -1,3 +1,4 @@
+//go:build windows
 // +build windows
 
 package d2
@@ -33,6 +34,10 @@ const (
 
 	// ModHDIdentifier is the identifier we use to look for installs of hd mod.
 	ModHDIdentifier = "D2HD.dll"
+
+	// ModD2GLIdentifier is the identifier we use to look for installs of d2gl.
+	// d2gl replaces the Glide wrapper, so glide3x.dll is what it always ships.
+	ModD2GLIdentifier = "glide3x.dll"
 
 	// RegistryLayers is where all data about execution resides, like DEP.
 	RegistryLayers = `Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers`

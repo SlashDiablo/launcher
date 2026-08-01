@@ -18,4 +18,11 @@ type Game struct {
 	Flags          []string `json:"flags"`
 	HDVersion      string   `json:"hd_version"`
 	MaphackVersion string   `json:"maphack_version"`
+	D2GLVersion    string   `json:"d2gl_version"`
+
+	// D2GLSplitProfiles launches the first instance with its own d2gl config,
+	// so a main box can run at a different resolution than the loaders.
+	D2GLSplitProfiles    bool   `json:"d2gl_split_profiles"`
+	D2GLMainResolution   string `json:"d2gl_main_resolution"`
+	D2GLLoaderResolution string `json:"d2gl_loader_resolution"`
 }

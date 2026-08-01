@@ -37,7 +37,7 @@ Item {
     // Mods.
     Item {
         height: 25
-        width: 60
+        width: 85
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
         anchors.rightMargin: 28
@@ -70,6 +70,19 @@ Item {
                 SText {
                     anchors.centerIn: parent
                     text: "MH"
+                    font.pixelSize: 10
+                    font.bold: true
+                }
+            }
+            // d2gl circle.
+            Item {
+                visible: (model.d2gl_version != "none")
+                width: 25
+                height: 25
+
+                SText {
+                    anchors.centerIn: parent
+                    text: "GL"
                     font.pixelSize: 10
                     font.bold: true
                 }

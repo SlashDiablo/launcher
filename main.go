@@ -26,16 +26,18 @@ import (
 func main() {
 	// Environment variables set when building.
 	var (
-		debugMode    = envBool("DEBUG_MODE", false)
-		environment  = envString("ENVIRONMENT", "production")
-		buildVersion = envString("BUILD_VERSION", "v1.1.2")
+		debugMode     = envBool("DEBUG_MODE", false)
+		environment   = envString("ENVIRONMENT", "production")
+		buildVersion  = envString("BUILD_VERSION", "v1.2.0")
+		filesAddress  = envString("SLASHDIABLO_FILES_ADDRESS", "https://slashdiablo.net/files")
+		ladderAddress = envString("SLASHDIABLO_LADDER_ADDRESS", "https://ladder.slashdiablo.net")
 	)
 
 	// Set app context.
-	core.QCoreApplication_SetApplicationName("Slashdiablo launcher")
+	core.QCoreApplication_SetApplicationName("SlashDiablo launcher")
 	core.QCoreApplication_SetOrganizationName("slashdiablo.net")
 	core.QCoreApplication_SetOrganizationDomain("slashdiablo.net")
-	core.QCoreApplication_SetApplicationVersion("1.1.2")
+	core.QCoreApplication_SetApplicationVersion("1.2.0")
 
 	// Enable high dpi scaling, useful for devices with high pixel density displays.
 	core.QCoreApplication_SetAttribute(core.Qt__AA_EnableHighDpiScaling, true)
@@ -94,8 +96,8 @@ func main() {
 	fm := d2.NewFileModel(nil)
 
 	// Setup clients.
-	sc := slashdiablo.NewClient()
-	lc := ladderClient.NewClient()
+	sc := slashdiablo.NewClient(filesAddress)
+	lc := ladderClient.NewClient(ladderAddress)
 
 	// Setup services.
 	cs := config.NewService(sc, store, gm)
@@ -167,6 +169,10 @@ func populateGameModel(conf *storage.Config, gm *config.GameModel) {
 		g.Flags = game.Flags
 		g.HDVersion = game.HDVersion
 		g.MaphackVersion = game.MaphackVersion
+		g.D2GLVersion = game.D2GLVersion
+		g.D2GLSplitProfiles = game.D2GLSplitProfiles
+		g.D2GLMainResolution = game.D2GLMainResolution
+		g.D2GLLoaderResolution = game.D2GLLoaderResolution
 
 		gm.AddGame(g)
 	}
