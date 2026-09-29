@@ -89,6 +89,7 @@ type UpdateGameRequest struct {
 	D2GLSplitProfiles    bool   `json:"d2gl_split_profiles"`
 	D2GLMainResolution   string `json:"d2gl_main_resolution"`
 	D2GLLoaderResolution string `json:"d2gl_loader_resolution"`
+	D2GLUnlockCursor     bool   `json:"d2gl_unlock_cursor"`
 }
 
 // UpsertGame will upsert the game to the config.
@@ -115,6 +116,7 @@ func (s *service) UpsertGame(request UpdateGameRequest) error {
 			games[i].D2GLSplitProfiles = request.D2GLSplitProfiles
 			games[i].D2GLMainResolution = request.D2GLMainResolution
 			games[i].D2GLLoaderResolution = request.D2GLLoaderResolution
+			games[i].D2GLUnlockCursor = request.D2GLUnlockCursor
 		}
 	}
 
@@ -191,6 +193,7 @@ func (s *service) PersistGameModel() error {
 			D2GLSplitProfiles:    games[i].D2GLSplitProfiles,
 			D2GLMainResolution:   games[i].D2GLMainResolution,
 			D2GLLoaderResolution: games[i].D2GLLoaderResolution,
+			D2GLUnlockCursor:     games[i].D2GLUnlockCursor,
 		})
 	}
 

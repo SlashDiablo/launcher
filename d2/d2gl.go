@@ -54,13 +54,36 @@ func launchFlags(game storage.Game, instance int) []string {
 	return append(flags, "-config", profile)
 }
 
-// applyD2GLProfiles writes the configured resolution into each profile before
-// any box launches. Only the keys the launcher owns are touched; D2GL fills in
-// everything else the first time it reads the file, so the in game options menu
-// keeps working for every other setting.
+// d2glProfilePath is the ini a box launched with the given profile reads. An
+// empty profile is the shared d2gl.ini, which is what runs when profiles
+// aren't split.
+func d2glProfilePath(gamePath string, profile string) string {
+	if profile == "" {
+		return localizePath(fmt.Sprintf("%s/d2gl.ini", gamePath))
+	}
+
+	return localizePath(fmt.Sprintf("%s/d2gl_%s.ini", gamePath, profile))
+}
+
+// applyD2GLProfiles writes the launcher owned keys into every config the game
+// will actually launch with, before any box starts. Everything else in the file
+// is left alone, so D2GL's own comments and the settings players change with
+// ctrl+O survive.
 func applyD2GLProfiles(game storage.Game) error {
-	if !d2glEnabled(game) || !game.D2GLSplitProfiles {
+	if !d2glEnabled(game) {
 		return nil
+	}
+
+	// Cursor lock is a personal preference rather than a per box one, so it
+	// goes into every profile.
+	shared := map[string]string{
+		"unlock_cursor": strconv.FormatBool(game.D2GLUnlockCursor),
+	}
+
+	// Without split profiles every box shares d2gl.ini, so there is no per box
+	// resolution to write.
+	if !game.D2GLSplitProfiles {
+		return writeD2GLKeys(d2glProfilePath(game.Location, ""), shared)
 	}
 
 	profiles := map[string]string{
@@ -69,14 +92,20 @@ func applyD2GLProfiles(game storage.Game) error {
 	}
 
 	for profile, resolution := range profiles {
-		width, height, ok := parseResolution(resolution)
-		if !ok {
-			// No resolution chosen for this profile, leave whatever D2GL has.
-			continue
+		values := make(map[string]string, len(shared)+3)
+		for key, value := range shared {
+			values[key] = value
 		}
 
-		path := localizePath(fmt.Sprintf("%s/d2gl_%s.ini", game.Location, profile))
-		if err := writeD2GLResolution(path, width, height); err != nil {
+		if width, height, ok := parseResolution(resolution); ok {
+			values["window_width"] = strconv.Itoa(width)
+			values["window_height"] = strconv.Itoa(height)
+			// A fullscreen window ignores the size entirely, so an explicit
+			// resolution only means anything windowed.
+			values["fullscreen"] = "false"
+		}
+
+		if err := writeD2GLKeys(d2glProfilePath(game.Location, profile), values); err != nil {
 			return err
 		}
 	}
@@ -105,17 +134,9 @@ func parseResolution(resolution string) (int, int, bool) {
 	return width, height, true
 }
 
-// writeD2GLResolution sets the window size on an existing profile, or creates a
+// writeD2GLKeys sets the given keys on an existing profile, or creates a
 // minimal one that D2GL will expand on first launch.
-func writeD2GLResolution(path string, width int, height int) error {
-	values := map[string]string{
-		"window_width":  strconv.Itoa(width),
-		"window_height": strconv.Itoa(height),
-		// A fullscreen window ignores the size entirely, so an explicit
-		// resolution only means anything windowed.
-		"fullscreen": "false",
-	}
-
+func writeD2GLKeys(path string, values map[string]string) error {
 	contents, err := ioutil.ReadFile(path)
 	if err != nil {
 		if !os.IsNotExist(err) {

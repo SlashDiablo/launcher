@@ -33,6 +33,12 @@ type Service interface {
 
 	// SetLaunchDelay is responsible for setting the delay between each game launch.
 	SetLaunchDelay(delay int) error
+
+	// ReadMaphackSettings returns the managed maphack toggles for a game.
+	ReadMaphackSettings(path string) (map[string]bool, error)
+
+	// WriteMaphackSettings updates the managed maphack toggles for a game.
+	WriteMaphackSettings(path string, values map[string]bool) error
 }
 
 // Service is responsible for all things related to Diablo II.
@@ -568,6 +574,18 @@ func (s *service) Patch(done chan bool) (<-chan float32, <-chan PatchState) {
 func (s *service) ApplyDEP(path string) error {
 	// Run OS specific fix.
 	return applyDEP(path)
+}
+
+// ReadMaphackSettings returns the managed maphack toggles for a game.
+func (s *service) ReadMaphackSettings(path string) (map[string]bool, error) {
+	return readMaphackSettings(path)
+}
+
+// WriteMaphackSettings updates the managed maphack toggles for a game. The
+// maphack re-reads its settings on the "Reload Config" hotkey, so a running
+// game picks the change up without a restart.
+func (s *service) WriteMaphackSettings(path string, values map[string]bool) error {
+	return writeMaphackSettings(path, values)
 }
 
 // SetLaunchDelay will set the given delay in milliseconds between each Diablo II launch.

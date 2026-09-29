@@ -13,6 +13,8 @@ Item {
     property int activeTab: 0
     property int activeMainResIndex: 0
     property int activeLoaderResIndex: 0
+    // The popup can't grow past 520 and the DONE button hangs over its bottom
+    // edge, so the GAME tab holds the directory picker plus seven rows at most.
     property int boxHeight: 50
 
     // Window sizes d2gl offers itself, taken from its own list in ini.cpp, with
@@ -29,10 +31,9 @@ Item {
         // Set current game instance to the view.
         game = current
 
-        // Textfield needs to be set explicitly since it's read only.
-        if(game.location != undefined) {
-            d2pathInput.text = game.location
-        }
+        // Textfield needs to be set explicitly since it's read only. Clear it for
+        // an install without a location, rather than keeping the last one's.
+        d2pathInput.text = (game.location != undefined) ? game.location : ""
 
         // Update initial states without triggering an animation.
         overrideMaphackCfgSwitch.update()
@@ -40,11 +41,79 @@ Item {
         updateHDVersions(current)
         updateMaphackVersions(current)
         updateD2GLVersions(current)
+        loadMaphackSettings()
         splitD2GLProfilesSwitch.update()
+        unlockCursorSwitch.update()
         activeMainResIndex = resolutionIndex(current.d2gl_main_resolution)
         mainResolution.currentIndex = activeMainResIndex
         activeLoaderResIndex = resolutionIndex(current.d2gl_loader_resolution)
         loaderResolution.currentIndex = activeLoaderResIndex
+    }
+
+    // Maphack toggles, split into the two columns shown on the MAPHACK tab. The
+    // names have to match the keys the launcher manages in BH_settings.cfg.
+    property var maphackMapSettings: [
+        "Reveal Map", "Show Monsters", "Show Missiles", "Show Chests",
+        "Infravision", "Remove Weather", "Display Level Names"
+    ]
+    property var maphackItemSettings: [
+        "Advanced Item Display", "Show Ethereal", "Show Sockets", "Show iLvl",
+        "Show Rune Numbers", "Experience Meter", "Stats on Right"
+    ]
+
+    // Current values, read back out of BH_settings.cfg rather than kept in the
+    // launcher config, since the maphack and the player both edit that file.
+    property var maphackSettings: ({})
+    property bool maphackLoaded: false
+    // Without a maphack installed there is no BH_settings.cfg worth writing, so
+    // the MAPHACK tab stays read only.
+    property bool maphackOff: (maphackVersion.currentText == "none")
+    // BH_settings.cfg only exists once the maphack has been patched in, and the
+    // launcher must not create it: patching skips it whenever it exists.
+    property bool maphackMissing: false
+    property bool maphackLocked: (maphackOff || maphackMissing)
+
+    function loadMaphackSettings() {
+        maphackLoaded = false
+        maphackMissing = false
+
+        // Read from the directory field rather than game.location, which is
+        // only the snapshot taken when the view opened and goes stale as soon
+        // as a new directory is picked.
+        var location = d2pathInput.text
+        if(game == undefined || location == "") {
+            maphackSettings = ({})
+            return
+        }
+
+        var settings = JSON.parse(diablo.readMaphackSettings(location))
+        maphackMissing = (settings == null)
+        maphackSettings = maphackMissing ? ({}) : settings
+        maphackLoaded = true
+    }
+
+    function maphackSetting(name) {
+        return (maphackSettings[name] != undefined) ? maphackSettings[name] : false
+    }
+
+    function setMaphackSetting(name, value) {
+        if(maphackLocked) {
+            return
+        }
+
+        // Rebuild the object so the change is seen by anything bound to it.
+        var updated = {}
+        for(var key in maphackSettings) {
+            updated[key] = maphackSettings[key]
+        }
+        updated[name] = value
+        maphackSettings = updated
+
+        // A failed write leaves the file as it was, so show what's really on
+        // disk rather than the value that never got saved.
+        if(!diablo.writeMaphackSettings(d2pathInput.text, JSON.stringify(maphackSettings))) {
+            loadMaphackSettings()
+        }
     }
 
     // resolutionIndex finds the dropdown index for a stored resolution, falling
@@ -167,7 +236,8 @@ Item {
                 d2gl_version: d2glVersion.currentText,
                 d2gl_split_profiles: splitD2GLProfilesSwitch.checked,
                 d2gl_main_resolution: mainResolution.currentText,
-                d2gl_loader_resolution: loaderResolution.currentText
+                d2gl_loader_resolution: loaderResolution.currentText,
+                d2gl_unlock_cursor: unlockCursorSwitch.checked
             }
             
             settings.upsertGame(JSON.stringify(body))
@@ -183,7 +253,7 @@ Item {
         x: (parent.width * 0.025)
 
         Repeater {
-            model: ["GAME", "D2GL"]
+            model: ["GAME", "D2GL", "MAPHACK"]
 
             Title {
                 text: modelData
@@ -273,6 +343,9 @@ Item {
                             
                             // Update the game model.
                             updateGameModel()
+
+                            // The maphack tab belongs to the new directory now.
+                            loadMaphackSettings()
                         }
                     }
                 }
@@ -538,7 +611,8 @@ Item {
                 Separator{}
             }
 
-            // Use default maphack config.
+            // Box launch delay. Lives here as well as on the launcher bar,
+            // where it is hidden whenever the games aren't already up to date.
             Item {
                 Layout.preferredWidth: settingsLayout.width
                 Layout.preferredHeight: boxHeight
@@ -547,30 +621,35 @@ Item {
                     topPadding: 10
 
                     Column {
-                        width: (settingsLayout.width - overrideMaphackCfg.width)
+                        width: (settingsLayout.width - launchDelayBox.width)
                         Title {
-                            text: "OVERRIDE MAPHACK CONFIG"
+                            text: "BOX LAUNCH DELAY"
                             font.pixelSize: 13
                         }
 
                         SText {
-                            text: "Select if you want to provide your own custom BH.cfg"
+                            text: "Wait between launching each box, applies to every install"
                             font.pixelSize: 11
                             topPadding: 5
                             color: "#676767"
                         }
                     }
                     Column {
-                        id: overrideMaphackCfg
-                        width: 60
-                        SSwitch{
-                            id: overrideMaphackCfgSwitch
-                            checked: ((game != undefined && game.override_bh_cfg != undefined) ? game.override_bh_cfg : false)
-                            onToggled: updateGameModel()
+                        id: launchDelayBox
+                        width: 90
+
+                        Dropdown{
+                            id: launchDelaySetting
+                            model: ["1 sec", "2 sec", "3 sec", "4 sec", "5 sec"]
+                            height: 30
+                            width: 90
+                            currentIndex: (diablo.launchDelay > 0) ? ((diablo.launchDelay / 1000) - 1) : 0
+
+                            onActivated: diablo.updateLaunchDelay((this.currentIndex + 1) * 1000)
                         }
-                    } 
+                    }
                 }
-                
+
                 Separator{}
             }
 
@@ -787,6 +866,43 @@ Item {
                 Separator{}
             }
 
+            // Unlock cursor.
+            Item {
+                Layout.preferredWidth: d2glLayout.width
+                Layout.preferredHeight: boxHeight
+
+                Row {
+                    topPadding: 10
+
+                    Column {
+                        width: (d2glLayout.width - unlockCursorToggle.width)
+                        Title {
+                            text: "UNLOCK CURSOR"
+                            font.pixelSize: 13
+                        }
+
+                        SText {
+                            text: "Let the mouse leave the game window, applied to every box on launch"
+                            font.pixelSize: 11
+                            topPadding: 5
+                            color: "#676767"
+                        }
+                    }
+                    Column {
+                        id: unlockCursorToggle
+                        width: 60
+
+                        SSwitch{
+                            id: unlockCursorSwitch
+                            checked: ((game != undefined && game.d2gl_unlock_cursor != undefined) ? game.d2gl_unlock_cursor : false)
+                            onToggled: updateGameModel()
+                        }
+                    }
+                }
+
+                Separator{}
+            }
+
             // Loader resolution.
             Item {
                 Layout.preferredWidth: d2glLayout.width
@@ -827,6 +943,135 @@ Item {
                 }
 
                 Separator{}
+            }
+        }
+    }
+
+    Item {
+        id: maphackPage
+        visible: (activeTab == 2)
+        width: parent.width
+        height: 400
+
+        anchors.top: tabHeader.bottom
+        anchors.horizontalCenter: parent.horizontalCenter
+
+        ColumnLayout {
+            id: maphackLayout
+            width: (maphackPage.width * 0.95)
+            spacing: 2
+
+            anchors.horizontalCenter: parent.horizontalCenter
+
+            // Explanation.
+            Item {
+                Layout.preferredWidth: maphackLayout.width
+                Layout.preferredHeight: 70
+
+                Column {
+                    topPadding: 10
+                    width: maphackLayout.width
+
+                    Title {
+                        text: "MAPHACK SETTINGS"
+                        font.pixelSize: 13
+                    }
+
+                    SText {
+                        text: maphackOff
+                            ? "Pick a maphack version on the GAME tab first"
+                            : maphackMissing
+                            ? "Patch the game to install the maphack, then its settings can be changed here"
+                            : "Written straight to BH_settings.cfg. Press NumPad0 in game to reload it without restarting. Hotkeys, comments and every setting not listed here are left alone."
+                        width: maphackLayout.width
+                        wrapMode: Text.WordWrap
+                        font.pixelSize: 11
+                        topPadding: 5
+                        color: maphackLocked ? "#8f3131" : "#676767"
+                    }
+                }
+
+                Separator{}
+            }
+
+            // Use default maphack config. Only decides whether patching replaces BH.cfg;
+            // the toggles below live in BH_settings.cfg, so they apply either way.
+            Item {
+                Layout.preferredWidth: maphackLayout.width
+                Layout.preferredHeight: boxHeight
+
+                Row {
+                    topPadding: 10
+
+                    Column {
+                        width: (maphackLayout.width - overrideMaphackCfg.width)
+                        Title {
+                            text: "OVERRIDE MAPHACK CONFIG"
+                            font.pixelSize: 13
+                        }
+
+                        SText {
+                            text: "Select if you want to provide your own custom BH.cfg"
+                            font.pixelSize: 11
+                            topPadding: 5
+                            color: "#676767"
+                        }
+                    }
+                    Column {
+                        id: overrideMaphackCfg
+                        width: 60
+                        SSwitch{
+                            id: overrideMaphackCfgSwitch
+                            checked: ((game != undefined && game.override_bh_cfg != undefined) ? game.override_bh_cfg : false)
+                            onToggled: updateGameModel()
+                        }
+                    } 
+                }
+                
+                Separator{}
+            }
+
+            // Two columns of toggles, seven rows of 38px switches.
+            Item {
+                Layout.preferredWidth: maphackLayout.width
+                Layout.preferredHeight: 300
+
+                Row {
+                    topPadding: 10
+                    width: maphackLayout.width
+
+                    Repeater {
+                        model: [maphackMapSettings, maphackItemSettings]
+
+                        Column {
+                            width: (maphackLayout.width / 2)
+                            spacing: 4
+
+                            Repeater {
+                                model: modelData
+
+                                Row {
+                                    spacing: 8
+                                    enabled: !maphackLocked
+                                    opacity: maphackLocked ? 0.4 : 1.0
+
+                                    SText {
+                                        text: modelData
+                                        width: (maphackLayout.width / 2) - 70
+                                        font.pixelSize: 12
+                                        color: "#a3a3a3"
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+
+                                    SSwitch {
+                                        checked: maphackSetting(modelData)
+                                        onToggled: setMaphackSetting(modelData, checked)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }

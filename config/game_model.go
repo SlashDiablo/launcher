@@ -17,6 +17,7 @@ const (
 	D2GLSplitProfiles
 	D2GLMainResolution
 	D2GLLoaderResolution
+	D2GLUnlockCursor
 )
 
 // GameModel represents a Diablo game.
@@ -45,6 +46,7 @@ func (m *GameModel) init() {
 		D2GLSplitProfiles:    core.NewQByteArray2("d2gl_split_profiles", -1),
 		D2GLMainResolution:   core.NewQByteArray2("d2gl_main_resolution", -1),
 		D2GLLoaderResolution: core.NewQByteArray2("d2gl_loader_resolution", -1),
+		D2GLUnlockCursor:     core.NewQByteArray2("d2gl_unlock_cursor", -1),
 	})
 
 	m.ConnectData(m.data)
@@ -100,6 +102,8 @@ func (m *GameModel) data(index *core.QModelIndex, role int) *core.QVariant {
 		return core.NewQVariant1(item.D2GLMainResolution)
 	case D2GLLoaderResolution:
 		return core.NewQVariant1(item.D2GLLoaderResolution)
+	case D2GLUnlockCursor:
+		return core.NewQVariant1(item.D2GLUnlockCursor)
 	default:
 		return core.NewQVariant()
 	}
@@ -117,7 +121,7 @@ func (m *GameModel) updateGame(index int) {
 	var fIndex = m.Index(0, 0, core.NewQModelIndex())
 	var lIndex = m.Index(index, 0, core.NewQModelIndex())
 	m.DataChanged(fIndex, lIndex, []int{Location, Instances, OverrideBHCfg, Flags, HDVersion, MaphackVersion, D2GLVersion,
-		D2GLSplitProfiles, D2GLMainResolution, D2GLLoaderResolution})
+		D2GLSplitProfiles, D2GLMainResolution, D2GLLoaderResolution, D2GLUnlockCursor})
 }
 
 func (m *GameModel) removeGame(index int) {

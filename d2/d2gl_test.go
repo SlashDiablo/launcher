@@ -1,6 +1,10 @@
 package d2
 
 import (
+	"io/ioutil"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -114,6 +118,103 @@ vsync=true
 	if strings.Contains(got, "window_width=1024") || strings.Contains(got, "fullscreen=true") {
 		t.Errorf("old values left behind in:\n%s", got)
 	}
+}
+
+func TestApplyD2GLProfilesWritesCursorToBothProfiles(t *testing.T) {
+	dir := t.TempDir()
+
+	game := storage.Game{
+		Location:             storedPath(dir),
+		D2GLVersion:          "1.3.3",
+		D2GLSplitProfiles:    true,
+		D2GLMainResolution:   "3200x1800",
+		D2GLLoaderResolution: "800x600",
+		D2GLUnlockCursor:     true,
+	}
+
+	if err := applyD2GLProfiles(game); err != nil {
+		t.Fatalf("applyD2GLProfiles: %v", err)
+	}
+
+	main := readFile(t, filepath.Join(dir, "d2gl_main.ini"))
+	loader := readFile(t, filepath.Join(dir, "d2gl_loader.ini"))
+
+	// Cursor is a personal preference, so it lands in both.
+	for name, contents := range map[string]string{"main": main, "loader": loader} {
+		if !strings.Contains(contents, "unlock_cursor=true") {
+			t.Errorf("%s profile missing cursor setting:\n%s", name, contents)
+		}
+	}
+
+	// Resolution is per box.
+	if !strings.Contains(main, "window_width=3200") {
+		t.Errorf("main resolution wrong:\n%s", main)
+	}
+	if !strings.Contains(loader, "window_width=800") {
+		t.Errorf("loader resolution wrong:\n%s", loader)
+	}
+}
+
+// Without split profiles every box shares d2gl.ini, and the cursor setting
+// still has to reach it.
+func TestApplyD2GLProfilesUnsplitWritesSharedIni(t *testing.T) {
+	dir := t.TempDir()
+
+	game := storage.Game{
+		Location:         storedPath(dir),
+		D2GLVersion:      "1.3.3",
+		D2GLUnlockCursor: true,
+	}
+
+	if err := applyD2GLProfiles(game); err != nil {
+		t.Fatalf("applyD2GLProfiles: %v", err)
+	}
+
+	shared := readFile(t, filepath.Join(dir, "d2gl.ini"))
+	if !strings.Contains(shared, "unlock_cursor=true") {
+		t.Errorf("shared ini missing cursor setting:\n%s", shared)
+	}
+
+	// No profiles should have been created.
+	if _, err := os.Stat(filepath.Join(dir, "d2gl_main.ini")); !os.IsNotExist(err) {
+		t.Error("main profile created despite profiles not being split")
+	}
+}
+
+// d2gl not selected at all means the launcher writes nothing.
+func TestApplyD2GLProfilesWithoutD2GL(t *testing.T) {
+	dir := t.TempDir()
+
+	if err := applyD2GLProfiles(storage.Game{Location: storedPath(dir), D2GLVersion: "none", D2GLUnlockCursor: true}); err != nil {
+		t.Fatalf("applyD2GLProfiles: %v", err)
+	}
+
+	files, _ := ioutil.ReadDir(dir)
+	if len(files) != 0 {
+		t.Errorf("wrote %d files for a game without d2gl", len(files))
+	}
+}
+
+// storedPath turns a real directory into the form the launcher keeps game
+// locations in. The QML file dialog hands paths over as "/C:/Games/Diablo II",
+// and localizePath on Windows strips that leading slash back off.
+func storedPath(dir string) string {
+	if runtime.GOOS == "windows" {
+		return "/" + filepath.ToSlash(dir)
+	}
+
+	return dir
+}
+
+func readFile(t *testing.T, path string) string {
+	t.Helper()
+
+	contents, err := ioutil.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+
+	return string(contents)
 }
 
 func TestUpdateD2GLProfileInsertsMissingKeys(t *testing.T) {

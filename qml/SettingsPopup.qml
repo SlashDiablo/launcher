@@ -21,7 +21,8 @@ Popup {
         "d2gl_version": 384,
         "d2gl_split_profiles": 512,
         "d2gl_main_resolution": 768,
-        "d2gl_loader_resolution": 1280
+        "d2gl_loader_resolution": 1280,
+        "d2gl_unlock_cursor": 2304
     }
 
     modal: true
@@ -442,6 +443,7 @@ Popup {
                 "d2gl_split_profiles": model.data(model.index(gamesList.currentIndex, 0), gameRoles.d2gl_split_profiles),
                 "d2gl_main_resolution": model.data(model.index(gamesList.currentIndex, 0), gameRoles.d2gl_main_resolution),
                 "d2gl_loader_resolution": model.data(model.index(gamesList.currentIndex, 0), gameRoles.d2gl_loader_resolution),
+                "d2gl_unlock_cursor": model.data(model.index(gamesList.currentIndex, 0), gameRoles.d2gl_unlock_cursor),
             })
         }
     }
