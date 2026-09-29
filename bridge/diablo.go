@@ -1,6 +1,8 @@
 package bridge
 
 import (
+	"encoding/json"
+
 	"github.com/nokka/slashdiablo-launcher/d2"
 	"github.com/nokka/slashdiablo-launcher/log"
 	"github.com/therecipe/qt/core"
@@ -34,6 +36,9 @@ type DiabloBridge struct {
 	_ func()                 `slot:"applyPatches"`
 	_ func(path string) bool `slot:"applyDEP"`
 	_ func(delay int)        `slot:"updateLaunchDelay"`
+
+	_ func(path string) string              `slot:"readMaphackSettings"`
+	_ func(path string, values string) bool `slot:"writeMaphackSettings"`
 }
 
 // Connect will connect the QML signals to functions in Go.
@@ -43,6 +48,42 @@ func (b *DiabloBridge) Connect() {
 	b.ConnectValidateVersion(b.validateVersion)
 	b.ConnectApplyDEP(b.applyDEP)
 	b.ConnectUpdateLaunchDelay(b.updateLaunchDelay)
+	b.ConnectReadMaphackSettings(b.readMaphackSettings)
+	b.ConnectWriteMaphackSettings(b.writeMaphackSettings)
+}
+
+// readMaphackSettings hands the managed maphack toggles to QML as JSON, since
+// slots can't carry a map across the bridge. An empty object means the settings
+// couldn't be read, which the view shows as everything off.
+func (b *DiabloBridge) readMaphackSettings(path string) string {
+	settings, err := b.d2service.ReadMaphackSettings(path)
+	if err != nil {
+		b.logger.Error(err)
+		return "{}"
+	}
+
+	encoded, err := json.Marshal(settings)
+	if err != nil {
+		b.logger.Error(err)
+		return "{}"
+	}
+
+	return string(encoded)
+}
+
+func (b *DiabloBridge) writeMaphackSettings(path string, values string) bool {
+	var settings map[string]bool
+	if err := json.Unmarshal([]byte(values), &settings); err != nil {
+		b.logger.Error(err)
+		return false
+	}
+
+	if err := b.d2service.WriteMaphackSettings(path, settings); err != nil {
+		b.logger.Error(err)
+		return false
+	}
+
+	return true
 }
 
 func (b *DiabloBridge) launchGame() {

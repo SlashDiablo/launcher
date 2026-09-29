@@ -25,6 +25,7 @@ type Game struct {
 	D2GLSplitProfiles    bool   `json:"d2gl_split_profiles"`
 	D2GLMainResolution   string `json:"d2gl_main_resolution"`
 	D2GLLoaderResolution string `json:"d2gl_loader_resolution"`
+	D2GLUnlockCursor     bool   `json:"d2gl_unlock_cursor"`
 }
 
 // GameMods represents the mods available for a Diablo II game.

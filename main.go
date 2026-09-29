@@ -173,6 +173,7 @@ func populateGameModel(conf *storage.Config, gm *config.GameModel) {
 		g.D2GLSplitProfiles = game.D2GLSplitProfiles
 		g.D2GLMainResolution = game.D2GLMainResolution
 		g.D2GLLoaderResolution = game.D2GLLoaderResolution
+		g.D2GLUnlockCursor = game.D2GLUnlockCursor
 
 		gm.AddGame(g)
 	}
