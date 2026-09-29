@@ -2,6 +2,7 @@ package d2
 
 import (
 	"io/ioutil"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -220,12 +221,21 @@ func TestReadMaphackSettings(t *testing.T) {
 // A missing settings file means maphack isn't installed yet, which should read
 // as defaults rather than an error.
 func TestReadMaphackSettingsMissingFile(t *testing.T) {
-	settings, err := readMaphackSettings(storedPath(t.TempDir()))
-	if err != nil {
-		t.Fatalf("readMaphackSettings on missing file: %v", err)
+	if _, err := readMaphackSettings(storedPath(t.TempDir())); err != ErrMaphackNotInstalled {
+		t.Errorf("got %v, want ErrMaphackNotInstalled", err)
+	}
+}
+
+// Patching skips BH_settings.cfg whenever it exists, so writing one before the
+// maphack is installed would stop the real template ever arriving.
+func TestWriteMaphackSettingsMissingFile(t *testing.T) {
+	dir := t.TempDir()
+
+	if err := writeMaphackSettings(storedPath(dir), map[string]bool{"Reveal Map": true}); err != ErrMaphackNotInstalled {
+		t.Errorf("got %v, want ErrMaphackNotInstalled", err)
 	}
 
-	if len(settings) != len(ManagedMaphackSettings) {
-		t.Errorf("got %d settings, want %d", len(settings), len(ManagedMaphackSettings))
+	if _, err := os.Stat(filepath.Join(dir, maphackSettingsFile)); !os.IsNotExist(err) {
+		t.Error("settings file created for a game without the maphack installed")
 	}
 }

@@ -53,10 +53,15 @@ func (b *DiabloBridge) Connect() {
 }
 
 // readMaphackSettings hands the managed maphack toggles to QML as JSON, since
-// slots can't carry a map across the bridge. An empty object means the settings
-// couldn't be read, which the view shows as everything off.
+// slots can't carry a map across the bridge. "null" means the maphack hasn't
+// been patched in yet, and an empty object means the settings couldn't be read,
+// which the view shows as everything off.
 func (b *DiabloBridge) readMaphackSettings(path string) string {
 	settings, err := b.d2service.ReadMaphackSettings(path)
+	if err == d2.ErrMaphackNotInstalled {
+		return "null"
+	}
+
 	if err != nil {
 		b.logger.Error(err)
 		return "{}"

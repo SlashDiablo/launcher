@@ -69,16 +69,23 @@ Item {
     // Without a maphack installed there is no BH_settings.cfg worth writing, so
     // the MAPHACK tab stays read only.
     property bool maphackOff: (maphackVersion.currentText == "none")
+    // BH_settings.cfg only exists once the maphack has been patched in, and the
+    // launcher must not create it: patching skips it whenever it exists.
+    property bool maphackMissing: false
+    property bool maphackLocked: (maphackOff || maphackMissing)
 
     function loadMaphackSettings() {
         maphackLoaded = false
+        maphackMissing = false
 
         if(game == undefined || game.location == undefined || game.location == "") {
             maphackSettings = ({})
             return
         }
 
-        maphackSettings = JSON.parse(diablo.readMaphackSettings(game.location))
+        var settings = JSON.parse(diablo.readMaphackSettings(game.location))
+        maphackMissing = (settings == null)
+        maphackSettings = maphackMissing ? ({}) : settings
         maphackLoaded = true
     }
 
@@ -87,7 +94,7 @@ Item {
     }
 
     function setMaphackSetting(name, value) {
-        if(maphackOff) {
+        if(maphackLocked) {
             return
         }
 
@@ -99,7 +106,11 @@ Item {
         updated[name] = value
         maphackSettings = updated
 
-        diablo.writeMaphackSettings(game.location, JSON.stringify(maphackSettings))
+        // A failed write leaves the file as it was, so show what's really on
+        // disk rather than the value that never got saved.
+        if(!diablo.writeMaphackSettings(game.location, JSON.stringify(maphackSettings))) {
+            loadMaphackSettings()
+        }
     }
 
     // resolutionIndex finds the dropdown index for a stored resolution, falling
@@ -963,12 +974,14 @@ Item {
                     SText {
                         text: maphackOff
                             ? "Pick a maphack version on the GAME tab first"
+                            : maphackMissing
+                            ? "Patch the game to install the maphack, then its settings can be changed here"
                             : "Written straight to BH_settings.cfg. Press NumPad0 in game to reload it without restarting. Hotkeys, comments and every setting not listed here are left alone."
                         width: maphackLayout.width
                         wrapMode: Text.WordWrap
                         font.pixelSize: 11
                         topPadding: 5
-                        color: maphackOff ? "#8f3131" : "#676767"
+                        color: maphackLocked ? "#8f3131" : "#676767"
                     }
                 }
 
@@ -1033,8 +1046,8 @@ Item {
 
                                 Row {
                                     spacing: 8
-                                    enabled: !maphackOff
-                                    opacity: maphackOff ? 0.4 : 1.0
+                                    enabled: !maphackLocked
+                                    opacity: maphackLocked ? 0.4 : 1.0
 
                                     SText {
                                         text: modelData

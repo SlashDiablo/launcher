@@ -1,6 +1,7 @@
 package d2
 
 import (
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -40,13 +41,17 @@ var ManagedMaphackSettings = []string{
 	"Stats on Right",
 }
 
+// ErrMaphackNotInstalled is returned when the game has no BH_settings.cfg yet,
+// which is the case until the maphack has been patched in.
+var ErrMaphackNotInstalled = errors.New("maphack settings not installed")
+
 func maphackSettingsPath(gamePath string) string {
 	return localizePath(fmt.Sprintf("%s/%s", gamePath, maphackSettingsFile))
 }
 
 // readMaphackSettings returns the current value of every managed toggle. A key
 // the file doesn't carry reports false rather than failing, so a trimmed down
-// or older settings file still opens.
+// or older settings file still opens. A missing file is ErrMaphackNotInstalled.
 func readMaphackSettings(gamePath string) (map[string]bool, error) {
 	settings := make(map[string]bool, len(ManagedMaphackSettings))
 	for _, key := range ManagedMaphackSettings {
@@ -55,9 +60,8 @@ func readMaphackSettings(gamePath string) (map[string]bool, error) {
 
 	contents, err := ioutil.ReadFile(maphackSettingsPath(gamePath))
 	if err != nil {
-		// No maphack installed yet, report the defaults rather than an error.
 		if os.IsNotExist(err) {
-			return settings, nil
+			return nil, ErrMaphackNotInstalled
 		}
 
 		return nil, err
@@ -77,17 +81,20 @@ func readMaphackSettings(gamePath string) (map[string]bool, error) {
 	return settings, nil
 }
 
-// writeMaphackSettings updates the managed toggles in place.
+// writeMaphackSettings updates the managed toggles in place. It never creates
+// the file: the patch marks BH_settings.cfg ignore_crc, so any copy on disk
+// counts as installed and a sparse one written here would stop the real
+// template from ever being patched in.
 func writeMaphackSettings(gamePath string, values map[string]bool) error {
 	path := maphackSettingsPath(gamePath)
 
 	contents, err := ioutil.ReadFile(path)
 	if err != nil {
-		if !os.IsNotExist(err) {
-			return err
+		if os.IsNotExist(err) {
+			return ErrMaphackNotInstalled
 		}
 
-		contents = []byte{}
+		return err
 	}
 
 	lines := strings.Split(string(contents), "\n")
