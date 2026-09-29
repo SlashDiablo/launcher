@@ -31,10 +31,9 @@ Item {
         // Set current game instance to the view.
         game = current
 
-        // Textfield needs to be set explicitly since it's read only.
-        if(game.location != undefined) {
-            d2pathInput.text = game.location
-        }
+        // Textfield needs to be set explicitly since it's read only. Clear it for
+        // an install without a location, rather than keeping the last one's.
+        d2pathInput.text = (game.location != undefined) ? game.location : ""
 
         // Update initial states without triggering an animation.
         overrideMaphackCfgSwitch.update()
@@ -78,12 +77,16 @@ Item {
         maphackLoaded = false
         maphackMissing = false
 
-        if(game == undefined || game.location == undefined || game.location == "") {
+        // Read from the directory field rather than game.location, which is
+        // only the snapshot taken when the view opened and goes stale as soon
+        // as a new directory is picked.
+        var location = d2pathInput.text
+        if(game == undefined || location == "") {
             maphackSettings = ({})
             return
         }
 
-        var settings = JSON.parse(diablo.readMaphackSettings(game.location))
+        var settings = JSON.parse(diablo.readMaphackSettings(location))
         maphackMissing = (settings == null)
         maphackSettings = maphackMissing ? ({}) : settings
         maphackLoaded = true
@@ -108,7 +111,7 @@ Item {
 
         // A failed write leaves the file as it was, so show what's really on
         // disk rather than the value that never got saved.
-        if(!diablo.writeMaphackSettings(game.location, JSON.stringify(maphackSettings))) {
+        if(!diablo.writeMaphackSettings(d2pathInput.text, JSON.stringify(maphackSettings))) {
             loadMaphackSettings()
         }
     }
@@ -340,6 +343,9 @@ Item {
                             
                             // Update the game model.
                             updateGameModel()
+
+                            // The maphack tab belongs to the new directory now.
+                            loadMaphackSettings()
                         }
                     }
                 }
